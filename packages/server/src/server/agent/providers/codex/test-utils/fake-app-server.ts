@@ -61,6 +61,14 @@ export interface FakeCodexAppServer {
     reason: string;
   }): void;
   waitForCommandApprovalDecision(itemId: string): Promise<unknown>;
+  requestMcpElicitation(params: {
+    threadId: string;
+    turnId: string | null;
+    serverName: string;
+    message: string;
+    requestedSchema: Record<string, unknown>;
+  }): void;
+  waitForMcpElicitationDecision(): Promise<unknown>;
 }
 
 export function createCodexAppServerChildProcess(): CodexAppServerChildProcess {
@@ -139,6 +147,7 @@ export function createFakeCodexAppServer(
   const messages: JsonObject[] = [];
   const errors: Error[] = [];
   const approvalRequestIds = new Map<string, number>();
+  let mcpElicitationRequestId: number | undefined;
   const waiters = new Set<{
     predicate: (message: JsonObject) => boolean;
     resolve: (message: JsonObject) => void;
@@ -399,6 +408,36 @@ export function createFakeCodexAppServer(
         (candidate) =>
           candidate.id === requestId && !("method" in candidate) && "result" in candidate,
         "command approval response",
+      );
+      return message.result;
+    },
+    requestMcpElicitation(params) {
+      const requestId = nextServerRequestId;
+      nextServerRequestId += 1;
+      mcpElicitationRequestId = requestId;
+      child.stdout.write(
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: requestId,
+          method: "mcpServer/elicitation/request",
+          params: {
+            ...params,
+            mode: "openai/form",
+            _meta: null,
+          },
+        })}\n`,
+      );
+    },
+    async waitForMcpElicitationDecision() {
+      if (mcpElicitationRequestId === undefined) {
+        throw new Error("No pending fake Codex app-server MCP elicitation");
+      }
+      const message = await waitForMessage(
+        (candidate) =>
+          candidate.id === mcpElicitationRequestId &&
+          !("method" in candidate) &&
+          "result" in candidate,
+        "MCP elicitation response",
       );
       return message.result;
     },

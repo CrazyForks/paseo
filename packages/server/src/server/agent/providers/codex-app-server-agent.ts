@@ -3085,7 +3085,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     string,
     {
       resolve: (value: unknown) => void;
-      kind: "command" | "file" | "question" | "plan";
+      kind: "command" | "file" | "question" | "mcp_elicitation" | "plan";
       questions?: CodexQuestionPrompt[];
       planText?: string;
     }
@@ -3426,6 +3426,9 @@ export class CodexAppServerAgentSession implements AgentSession {
     );
     this.client.setRequestHandler("item/tool/requestUserInput", (params) =>
       this.handleToolApprovalRequest(params),
+    );
+    this.client.setRequestHandler("mcpServer/elicitation/request", (params) =>
+      this.handleMcpElicitationRequest(params),
     );
     // Keep the legacy method name for older Codex builds.
     this.client.setRequestHandler("tool/requestUserInput", (params) =>
@@ -3949,6 +3952,15 @@ export class CodexAppServerAgentSession implements AgentSession {
       return;
     }
 
+    if (pending.kind === "mcp_elicitation") {
+      pending.resolve({
+        action: resolvePermissionDecision(response),
+        content: null,
+        _meta: null,
+      });
+      return;
+    }
+
     const questions = pending.questions ?? [];
     const itemId =
       typeof pendingRequest?.metadata?.itemId === "string"
@@ -4003,7 +4015,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     response: AgentPermissionResponse;
     pending: {
       resolve: (value: unknown) => void;
-      kind: "command" | "file" | "question" | "plan";
+      kind: "command" | "file" | "question" | "mcp_elicitation" | "plan";
       questions?: CodexQuestionPrompt[];
       planText?: string;
     };
@@ -5818,6 +5830,46 @@ export class CodexAppServerAgentSession implements AgentSession {
         kind: "question",
         questions,
       });
+    });
+  }
+
+  private handleMcpElicitationRequest(params: unknown): Promise<unknown> {
+    const parsed = z
+      .object({
+        threadId: z.string(),
+        turnId: z.string().nullable(),
+        serverName: z.string(),
+        mode: z.enum(["form", "openai/form", "url"]),
+        message: z.string(),
+        requestedSchema: z.unknown().optional(),
+        url: z.string().optional(),
+        elicitationId: z.string().optional(),
+      })
+      .parse(params);
+    const requestId = `permission-${randomUUID()}`;
+    const request: AgentPermissionRequest = {
+      id: requestId,
+      provider: CODEX_PROVIDER,
+      name: "CodexMcpElicitation",
+      kind: "tool",
+      title: `MCP approval: ${parsed.serverName}`,
+      description: parsed.message,
+      input: {
+        mode: parsed.mode,
+        requestedSchema: parsed.requestedSchema ?? null,
+        url: parsed.url ?? null,
+      },
+      metadata: {
+        threadId: parsed.threadId,
+        turnId: parsed.turnId,
+        serverName: parsed.serverName,
+        elicitationId: parsed.elicitationId ?? null,
+      },
+    };
+    this.pendingPermissions.set(requestId, request);
+    this.emitEvent({ type: "permission_requested", provider: CODEX_PROVIDER, request });
+    return new Promise((resolve) => {
+      this.pendingPermissionHandlers.set(requestId, { resolve, kind: "mcp_elicitation" });
     });
   }
 }
