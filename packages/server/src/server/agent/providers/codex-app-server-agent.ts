@@ -3955,7 +3955,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     if (pending.kind === "mcp_elicitation") {
       pending.resolve({
         action: resolvePermissionDecision(response),
-        content: null,
+        content: response.behavior === "allow" ? {} : null,
         _meta: null,
       });
       return;

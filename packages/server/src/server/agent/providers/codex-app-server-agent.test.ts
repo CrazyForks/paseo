@@ -604,7 +604,7 @@ describe("Codex app-server provider", () => {
 
     await expect(appServer.waitForMcpElicitationDecision()).resolves.toEqual({
       action: "accept",
-      content: null,
+      content: {},
       _meta: null,
     });
     await session.close();
