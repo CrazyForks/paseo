@@ -5837,7 +5837,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     const parsed = z
       .object({
         threadId: z.string(),
-        turnId: z.string().nullable(),
+        turnId: z.string().nullable().optional(),
         serverName: z.string(),
         mode: z.enum(["form", "openai/form", "url"]),
         message: z.string(),
@@ -5846,6 +5846,9 @@ export class CodexAppServerAgentSession implements AgentSession {
         elicitationId: z.string().optional(),
       })
       .parse(params);
+    if (parsed.mode === "url") {
+      return Promise.resolve({ action: "decline", content: null, _meta: null });
+    }
     const requestId = `permission-${randomUUID()}`;
     const request: AgentPermissionRequest = {
       id: requestId,
@@ -5861,7 +5864,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       },
       metadata: {
         threadId: parsed.threadId,
-        turnId: parsed.turnId,
+        turnId: parsed.turnId ?? null,
         serverName: parsed.serverName,
         elicitationId: parsed.elicitationId ?? null,
       },
