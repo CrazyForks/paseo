@@ -564,6 +564,8 @@ describe("Codex app-server provider", () => {
     );
 
     await session.connect();
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
 
     const permissionRequested = waitForNextPermission(session);
     appServer.requestMcpElicitation({
@@ -606,6 +608,22 @@ describe("Codex app-server provider", () => {
       action: "accept",
       content: {},
       _meta: null,
+    });
+    appServer.resolvesMcpElicitation();
+
+    await vi.waitFor(() => {
+      expect(events).toContainEqual({
+        type: "permission_resolved",
+        provider: "codex",
+        requestId: permission.request.id,
+        resolution: { behavior: "allow" },
+      });
+    });
+    expect(events).not.toContainEqual({
+      type: "permission_resolved",
+      provider: "codex",
+      requestId: permission.request.id,
+      resolution: { behavior: "deny", interrupt: true },
     });
     await session.close();
   });

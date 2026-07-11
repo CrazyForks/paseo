@@ -4489,9 +4489,12 @@ export class CodexAppServerAgentSession implements AgentSession {
       if (requestId) {
         const pending = this.pendingPermissionHandlers.get(requestId);
         this.mcpElicitationPermissionIds.delete(notificationParams.requestId);
+        if (!pending) {
+          return;
+        }
         this.pendingPermissions.delete(requestId);
         this.pendingPermissionHandlers.delete(requestId);
-        pending?.resolve({ action: "cancel", content: null, _meta: null });
+        pending.resolve({ action: "cancel", content: null, _meta: null });
         this.emitEvent({
           type: "permission_resolved",
           provider: CODEX_PROVIDER,

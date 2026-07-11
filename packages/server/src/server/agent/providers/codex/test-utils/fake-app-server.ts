@@ -69,6 +69,7 @@ export interface FakeCodexAppServer {
     requestedSchema: Record<string, unknown>;
   }): void;
   waitForMcpElicitationDecision(): Promise<unknown>;
+  resolvesMcpElicitation(): void;
 }
 
 export function createCodexAppServerChildProcess(): CodexAppServerChildProcess {
@@ -440,6 +441,12 @@ export function createFakeCodexAppServer(
         "MCP elicitation response",
       );
       return message.result;
+    },
+    resolvesMcpElicitation() {
+      if (mcpElicitationRequestId === undefined) {
+        throw new Error("No pending fake Codex app-server MCP elicitation");
+      }
+      writeNotification("serverRequest/resolved", { requestId: mcpElicitationRequestId });
     },
   };
 }
