@@ -5860,6 +5860,10 @@ export class CodexAppServerAgentSession implements AgentSession {
     if (parsed.mode === "url") {
       return Promise.resolve({ action: "decline", content: null, _meta: null });
     }
+    const requiredFields = toObjectRecord(parsed.requestedSchema)?.required;
+    if (Array.isArray(requiredFields) && requiredFields.length > 0) {
+      return Promise.resolve({ action: "decline", content: null, _meta: null });
+    }
     const requestId = `permission-${randomUUID()}`;
     const request: AgentPermissionRequest = {
       id: requestId,
