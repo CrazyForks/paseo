@@ -3081,6 +3081,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   private historyPending = false;
   private persistedHistory: PersistedTimelineEntry[] = [];
   private pendingPermissions = new Map<string, AgentPermissionRequest>();
+  private mcpElicitationPermissionIds = new Map<number, string>();
   private pendingPermissionHandlers = new Map<
     string,
     {
@@ -3427,8 +3428,8 @@ export class CodexAppServerAgentSession implements AgentSession {
     this.client.setRequestHandler("item/tool/requestUserInput", (params) =>
       this.handleToolApprovalRequest(params),
     );
-    this.client.setRequestHandler("mcpServer/elicitation/request", (params) =>
-      this.handleMcpElicitationRequest(params),
+    this.client.setRequestHandler("mcpServer/elicitation/request", (params, requestId) =>
+      this.handleMcpElicitationRequest(params, requestId),
     );
     // Keep the legacy method name for older Codex builds.
     this.client.setRequestHandler("tool/requestUserInput", (params) =>
@@ -4482,6 +4483,16 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   private handleNotification(method: string, params: unknown): void {
+    const notificationParams = toObjectRecord(params);
+    if (method === "serverRequest/resolved" && typeof notificationParams?.requestId === "number") {
+      const requestId = this.mcpElicitationPermissionIds.get(notificationParams.requestId);
+      if (requestId) {
+        this.mcpElicitationPermissionIds.delete(notificationParams.requestId);
+        this.pendingPermissions.delete(requestId);
+        this.pendingPermissionHandlers.delete(requestId);
+      }
+      return;
+    }
     const parsed = CodexNotificationSchema.parse({ method, params });
     this.traceParsedNotification(method, params, parsed);
     const route = this.resolveCodexThreadRoute(getCodexNotificationThreadId(parsed));
@@ -5833,7 +5844,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     });
   }
 
-  private handleMcpElicitationRequest(params: unknown): Promise<unknown> {
+  private handleMcpElicitationRequest(params: unknown, serverRequestId: number): Promise<unknown> {
     const parsed = z
       .object({
         threadId: z.string(),
@@ -5870,6 +5881,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       },
     };
     this.pendingPermissions.set(requestId, request);
+    this.mcpElicitationPermissionIds.set(serverRequestId, requestId);
     this.emitEvent({ type: "permission_requested", provider: CODEX_PROVIDER, request });
     return new Promise((resolve) => {
       this.pendingPermissionHandlers.set(requestId, { resolve, kind: "mcp_elicitation" });
